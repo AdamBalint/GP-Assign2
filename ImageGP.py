@@ -33,27 +33,48 @@ images = []
 images.append(imread("Images/g-img1.png", flatten="False", mode="RGB"))
 images.append(sobel(images[0], axis=0))
 images.append(sobel(images[0], axis=1))
+mag = np.hypot(images[-1], images[-2])  # magnitude
+mag *= 255.0 / np.max(mag)  # normalize (Q&D)
+imsave('sobel-both.jpg', mag)
 images.append(laplace(images[0]))
+imsave('laplace.jpg', images[-1])
 images.append(gaussian_laplace(images[0], 0.05))
 mean_13 = []
 mean_17 = []
 mean_21 = []
-
+std_13 = []
+std_17 = []
+std_21 = []
 print("Reading in pre-calculated means...")
 
-f = open("Images/Means/img-0-13.txt", 'r')
+f = open("Images/Means/Test2-img-0-13.txt", 'r')
 for row in f.readlines():
     mean_13.append([float(x) for x in row.split()])
 f.close()
 
-f = open("Images/Means/img-0-17.txt", 'r')
+f = open("Images/Means/Test2-img-0-17.txt", 'r')
 for row in f.readlines():
     mean_17.append([float(x) for x in row.split()])
 f.close()
 
-f = open("Images/Means/img-0-21.txt", 'r')
+f = open("Images/Means/Test2-img-0-21.txt", 'r')
 for row in f.readlines():
     mean_21.append([float(x) for x in row.split()])
+f.close()
+
+f = open("Images/Deviation/Test2-img-0-13.txt", 'r')
+for row in f.readlines():
+    std_13.append([float(x) for x in row.split()])
+f.close()
+
+f = open("Images/Deviation/Test2-img-0-17.txt", 'r')
+for row in f.readlines():
+    std_17.append([float(x) for x in row.split()])
+f.close()
+
+f = open("Images/Deviation/Test2-img-0-21.txt", 'r')
+for row in f.readlines():
+    std_21.append([float(x) for x in row.split()])
 f.close()
 
 print("Setting up data for use...")
@@ -62,9 +83,10 @@ for y in range(len(gt_img)):
     row = []
     for x in range(len(gt_img[y])):
         #print(images[0][y][x])
-        tmp = [int(gt_img[y][x]), int(images[0][y][x]), mean_13[y][x], mean_17[y][x], mean_21[y][x], int(images[2][y][x])%255, int(images[1][y][x])%255, int(images[3][y][x])%255, int(images[4][y][x])%255]
+        tmp = [int(gt_img[y][x]), int(images[0][y][x]), mean_13[y][x], mean_17[y][x], mean_21[y][x], std_13[y][x], std_17[y][x], std_21[y][x],
+        int(images[2][y][x])%255, int(images[1][y][x])%255, int(images[3][y][x])%255, int(images[4][y][x])%255]
 
-        # sobels:
+        # sobels:mean_17[y][x],
         #print (tmp)
         row.append(tmp)
     data.append(row)
@@ -72,12 +94,15 @@ for y in range(len(gt_img)):
 points = []
 
 print("Reading in training points...")
-f = open("img_1_datapoints.txt")
+#f = open("img_1_datapoints.txt")
+f = open("Rand_datapoints4.txt")
 
 for line in f.readlines()[1:]:
     points.append([int(l) for l in line.split()])
     #print (x) for x in line.split()[:2])
 #print(points)
+
+print(points[0])
 
 #print (data)
 
@@ -147,6 +172,8 @@ def compStatement(n1, n2, n3, n4):
 def det2x2(n11, n12, n21, n22):
     return (n11*n22-n12*n21)
 
+def average(n1, n2):
+    return (n1+n2)/2
 
 # allows to set the test number to use, and the base output name
 test_num = 6;
@@ -157,7 +184,7 @@ name = "Experiment-" + str(test_num)
 
 # set up GP parameters
 # Original Value, Original Mean x 3, Value Sobel vertical, value sobel horizontal, edge detect, blotchy value
-pset = gp.PrimitiveSet("MAIN", 8)
+pset = gp.PrimitiveSet("MAIN", 11)
 # add the addition operator. Has 2 inputs
 # sets up the rest of the operators to use
 pset.addPrimitive(operator.add, 2)
@@ -180,15 +207,16 @@ if (test_num > 2):
 
 # unused operators
 #pset.addPrimitive(cos,1)
-#pset.addPrimitive(abs_sqrt, 1)
-#pset.addPrimitive(max, 2)
-#pset.addPrimitive(min, 2)
+pset.addPrimitive(abs_sqrt, 1)
+pset.addPrimitive(max, 2)
+pset.addPrimitive(min, 2)
 #pset.addPrimitive(math.floor, 1)
 #pset.addPrimitive(math.ceil, 1)
-#pset.addPrimitive(modulo, 2) # seems to be pretty good
+pset.addPrimitive(modulo, 2) # seems to be pretty good
 #pset.addPrimitive(dist,4)
 #pset.addPrimitive(compStatement,4)
 #pset.addPrimitive(det2x2,4)
+pset.addPrimitive(average,2)
 
 # add the posibility of a constant from -1 to 1
 pset.addEphemeralConstant("const", lambda: random.uniform(-1, 1))
@@ -197,10 +225,13 @@ pset.renameArguments(ARG0="oValue")
 pset.renameArguments(ARG1="oAvg13")
 pset.renameArguments(ARG2="oAvg17")
 pset.renameArguments(ARG3="oAvg21")
-pset.renameArguments(ARG4="sobelVal_v")
-pset.renameArguments(ARG5="sobelVal_h")
-pset.renameArguments(ARG6="edgeVal")
-pset.renameArguments(ARG7="blotchVal")
+pset.renameArguments(ARG4="oStd13")
+pset.renameArguments(ARG5="oStd17")
+pset.renameArguments(ARG6="oStd21")
+pset.renameArguments(ARG7="sobelVal_v")
+pset.renameArguments(ARG8="sobelVal_h")
+pset.renameArguments(ARG9="edgeVal")
+pset.renameArguments(ARG10="blotchVal")
 
 # Individual will have intensity, 13x13, 17x17, 21x21 means for each filter
 # evaluation will take the arrays, and an x and y value
@@ -218,7 +249,7 @@ creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
 # set tree generation parameters
-toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=3, max_=6)
+toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=2, max_=5)
 # Set up individuals and populations and set up the compilation process
 toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
@@ -232,8 +263,12 @@ def evalFunc(individual, all_data, train_points):
     total = 1.0
 
     for point in train_points:
-        tmp = [float(x) for x in all_data[point[1]][point[0]][1:9]]
-        total += int((0 if (func(*tmp)) <= 0 else 1) == point[2])
+        tmp = [float(x) for x in all_data[point[1]][point[0]][1:]]
+        if (int((0 if (func(*tmp)) <= 0 else 1) == point[2])):
+            if (point[2] == 0):
+                total += 0.1
+            else:
+                total += 0.9
         #print("Result: " + str(int((0 if (func(*tmp)) <= 0 else 1)) + "\tAns: " + str(point[2]))
 
 
@@ -241,7 +276,7 @@ def evalFunc(individual, all_data, train_points):
 
 # define the evaluation for the testing
 # Identical to above, but does more logging
-def testEval(individual, all_data):
+def testEval(individual, all_data, train_points):
     tp, tn, fp, fn = 0,0,0,0
     func = toolbox.compile(expr=individual)
     total = 0
@@ -252,26 +287,29 @@ def testEval(individual, all_data):
         #print("In row: " + str(y))
         t = []
         for x in range(len(gt_img[y])):
-            tmp = [float(a) for a in all_data[y][x][1:9]]
+            tmp = [float(a) for a in all_data[y][x][1:]]
             res = 0 if (func(*tmp)) <= 0 else 1
 
             if (res == 1):
                 if (all_data[y][x][0] > 0):
                     tp += 1
-                    t.append([255,0,0,255])
+                    t.append([125,0,0,255])
                 else:
                     fp += 1
-                    t.append([0,255,0,255])
+                    t.append([0,125,0,255])
             else:
                 if (all_data[y][x][0] > 0):
                     fn += 1
-                    t.append([0,0,255,255])
+                    t.append([0,0,125,255])
                 else:
                     tn += 1
                     t.append([0,0,0,255])
         im.append(t)
         #total += res
-    imsave("ResultImage-p500n17x17.png", im)
+
+    for i in train_points:
+        im[i[1]][i[0]] = (255, 255, 0, 255)
+    imsave("Small res5.png", im)
     print("Image saved")
     return [(tp+tn)/(tp+tn+fp+fn), tp, tn, fp, fn]
 
@@ -281,10 +319,10 @@ toolbox.register("evaluate", evalFunc, all_data=data, train_points=points)
 # set up GP parameters
 toolbox.register("select", tools.selTournament, tournsize=4)
 toolbox.register("mate", gp.cxOnePoint)
-toolbox.register("expr_mut", gp.genFull, min_=3, max_=6)
+toolbox.register("expr_mut", gp.genFull, min_=0, max_=3)
 toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
-toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=13))
-toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=13))
+toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
+toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
 # Set up logging
 stats_fit = tools.Statistics(lambda ind: ind.fitness.values)
@@ -308,7 +346,7 @@ for i in range(1):
     #toolbox.register("evaluate", evalFunc, data)
 
     # generate the populations
-    pop = toolbox.population(n=500)
+    pop = toolbox.population(n=1250)
     # holds the n best individuals
     hof = tools.HallOfFame(1)
     print ("Run: " + str(i))
@@ -321,7 +359,7 @@ for i in range(1):
     # Print and store the testing results for the best solution
 
     #print("fitness: " + str(testEval(expr, test_data)))
-    avg_vals.append("\t".join(str(s) for s in testEval(expr, data)))
+    avg_vals.append("\t".join(str(s) for s in testEval(expr, data, points)))
 
 # write results to the file
 f_avg.write(str("\n".join(str(s) for s in avg_vals)))
